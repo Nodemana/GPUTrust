@@ -3,25 +3,72 @@ pragma solidity ^0.8.0;
 
 contract GPUListing {
     address public seller;
-    address public gpu_registration;
-    int public price;
     address public buyer;
+    address public arbiter;
+    address public gpu_registration;
+    uint256 public price;
+    bool public deposited;
 
-    constructor(string memory _UUID, bytes32 benchmark_hash) {
-        UUID = _UUID;
-        benchmark_hashs.push(benchmark_hash);
-        owners.push(msg.sender);
+    mapping(address => bool) public approvedRelease;  // who has approved release
+    uint8   public release_ApprovalCount;
+
+    mapping(address => bool) public approvedRefund;  // who has approved refund
+    uint8   public refund_ApprovalCount;
+
+
+    constructor(address _arbiter, uint256 _priceWei, address _gpu_registration) {
+        seller  = msg.sender;
+        arbiter = _arbiter;
+        price   = _priceWei;
+        gpu_registration = _gpu_registration;
     }
 
-    function depositFunds(address new_owner) public payable {
-
+    // Buyer Deposits Funds into Escrow
+    function deposit() external payable {
+        require(!deposited, "Already funded");
+        require(msg.value == price, "Wrong amount");
+        buyer    = msg.sender;
+        deposited = true;
     }
 
-    function setBenchmark(bytes32 new_benchmark_hash) public {
-        benchmark_hashs.push(new_benchmark_hash);
+    /// Any of buyer/seller/arbiter can call to “approve” a release
+    function approveRelease() external {
+        require(deposited, "No funds");
+        require(
+            msg.sender == buyer ||
+            msg.sender == seller ||
+            msg.sender == arbiter,
+            "Not authorized"
+        );
+        require(!approvedRelease[msg.sender], "Already approved");
+
+        approvedRelease[msg.sender] = true;
+        release_ApprovalCount += 1;
+
+        // Once two approvals exist, funds go to seller:
+        if (release_ApprovalCount >= 2) {
+            payable(seller).transfer(address(this).balance);
+            deposited = false;
+        }
     }
 
-    function getDetails() public view returns (string memory, address[] memory, bytes32[] memory) {
-       return (UUID, owners, benchmark_hashs);
+    function approveRefund() external {
+        require(deposited, "No funds");
+        require(
+            msg.sender == buyer ||
+            msg.sender == seller ||
+            msg.sender == arbiter,
+            "Not authorized"
+        );
+        require(!approvedRefund[msg.sender], "Already approved");
+
+        approvedRefund[msg.sender] = true;
+        refund_ApprovalCount += 1;
+
+        // Once two approvals exist, funds refunded to buyer:
+        if (refund_ApprovalCount >= 2) {
+            payable(buyer).transfer(address(this).balance);
+            deposited = false;
+        }
     }
 }
