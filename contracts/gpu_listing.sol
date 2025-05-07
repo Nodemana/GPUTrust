@@ -7,6 +7,7 @@ contract GPUListing {
     address public arbiter;
     address public gpu_registration;
     uint256 public price;
+    uint256 public commission;
     bool public deposited;
 
     mapping(address => bool) public approvedRelease;  // who has approved release
@@ -16,10 +17,11 @@ contract GPUListing {
     uint8   public refund_ApprovalCount;
 
 
-    constructor(address _arbiter, uint256 _priceWei, address _gpu_registration) {
+    constructor(address _arbiter, uint256 _priceWei, uint256 _commission_perc, address _gpu_registration) {
         seller  = msg.sender;
         arbiter = _arbiter;
         price   = _priceWei;
+        commission = (_priceWei / 100) * _commission_perc;
         gpu_registration = _gpu_registration;
     }
 
@@ -47,7 +49,9 @@ contract GPUListing {
 
         // Once two approvals exist, funds go to seller:
         if (release_ApprovalCount >= 2) {
+            payable(arbiter).transfer(commission);
             payable(seller).transfer(address(this).balance);
+            IGPURegistration(gpu_registration).setOwner(buyer);
             deposited = false;
         }
     }
@@ -71,4 +75,8 @@ contract GPUListing {
             deposited = false;
         }
     }
+}
+
+interface IGPURegistration {
+    function setOwner(address new_owner) external;
 }
