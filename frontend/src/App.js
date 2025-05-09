@@ -327,7 +327,7 @@ export default function App() {
   const handleCreateListing = ({ sellRegAddr, sellPrice, sellCommission }) => {
     const fakeAddress = ethers.Wallet.createRandom().address;
     alert(
-      `✨ (Stub) Created listing at ${fakeAddress}\n` +
+      ` (Stub) Created listing at ${fakeAddress}\n` +
       `Price: ${sellPrice} ETH\nCommission: ${sellCommission}%`
     );
     setGpus((prev) => [...prev, { uuid: fakeAddress, price: sellPrice }]);
@@ -335,7 +335,7 @@ export default function App() {
 
   // BUY: UI stub only
   const handleDeposit = (amount, listingAddr) => {
-    alert(`✨ (Stub) Bought GPU at ${listingAddr} for ${amount} ETH`);
+    alert(` (Stub) Bought GPU at ${listingAddr} for ${amount} ETH`);
   };
 
   return (
