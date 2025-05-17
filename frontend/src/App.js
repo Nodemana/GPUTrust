@@ -7,6 +7,7 @@ import {
   Link,
   useParams,
   useNavigate,
+  useLocation,
 } from "react-router-dom";
 import {
   FaShoppingCart,
@@ -19,12 +20,12 @@ import { PiGraphicsCardFill } from "react-icons/pi";
 import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
-import getBenchmark from "./utils.js"
+import getBenchmark from "./utils.js";
 
-// switch MetaMask to Sepolia
+// --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
-    alert(" Please install MetaMask");
+    alert("🦊 Please install MetaMask");
     return false;
   }
   try {
@@ -42,7 +43,11 @@ async function ensureSepolia() {
             chainId: "0xaa36a7",
             chainName: "Sepolia Test Network",
             rpcUrls: ["https://rpc.sepolia.org"],
-            nativeCurrency: { name: "SepoliaETH", symbol: "SEP", decimals: 18 },
+            nativeCurrency: {
+              name: "SepoliaETH",
+              symbol: "SEP",
+              decimals: 18,
+            },
             blockExplorerUrls: ["https://sepolia.etherscan.io"],
           },
         ],
@@ -54,7 +59,7 @@ async function ensureSepolia() {
   }
 }
 
-// Home: lists all listings and allows deposit
+// --- Home page ---
 function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
@@ -74,15 +79,15 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
           <p className="text-gray-600 mb-6">
             Secure, trustless GPU trading on the Sepolia testnet.
           </p>
-        <Link
+          <Link
             to="/mygpus"
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center"
+            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center mr-4"
           >
             <PiGraphicsCardFill className="mr-2" /> My GPUs
           </Link>
-        <Link
+          <Link
             to="/register"
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center"
+            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center mr-4"
           >
             <FaClipboardList className="mr-2" /> Register Your GPU
           </Link>
@@ -145,29 +150,24 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
       </section>
     </div>
   );
-};
+}
 
+// --- Benchmark & GPU Cards ---
 function BenchmarkCard({ data, uuid }) {
   return (
-    <div className="relative mt-8 bg-slate-300/70 backdrop-blur
-                    rounded-2xl shadow-lg p-6 w-full max-w-md">
-
-      {/* header row ─ uuid on the left, label on the right */}
-      <div className="flex items-baseline justify-between mb-6">
+    <div className="mt-8 bg-slate-300/70 backdrop-blur rounded-2xl shadow-lg p-6 max-w-md mx-auto">
+      <div className="flex justify-between mb-6">
         <span className="text-xs font-mono text-gray-600 select-all">
           {uuid}
         </span>
-
-        {/* subtle section label */}
-        <span className="text-sm tracking-wider uppercase text-gray-500">
-          Benchmark&nbsp;results
+        <span className="text-sm uppercase text-gray-500">
+          Benchmark Results
         </span>
       </div>
-
       <dl className="grid grid-cols-2 gap-4">
         {Object.entries(data).map(([k, v]) => (
-          <div key={k} className="flex flex-col">
-            <dt className="text-[0.65rem] uppercase tracking-wider text-gray-500">
+          <div key={k}>
+            <dt className="text-[0.65rem] uppercase text-gray-500">
               {k.replace(/_/g, " ")}
             </dt>
             <dd className="text-lg font-semibold">{v}</dd>
@@ -177,124 +177,119 @@ function BenchmarkCard({ data, uuid }) {
     </div>
   );
 }
-
 
 function GPUCard({ gpu }) {
   const { uuid, benchmark = {}, reg_contract, benchmark_hash } = gpu;
-
   return (
-    <div className="relative mt-8 bg-slate-300/70 backdrop-blur
-                    rounded-2xl shadow-lg p-6 w-full max-w-md">
-
-      {/* header row ─ uuid on the left, label on the right */}
-      <div className="flex items-baseline justify-between mb-6">
+    <div className="mt-8 bg-slate-300/70 backdrop-blur rounded-2xl shadow-lg p-6 max-w-md mx-auto">
+      <div className="flex justify-between mb-6">
         <span className="text-xs font-mono text-gray-600 select-all">
           {uuid}
         </span>
-
-        <span className="text-sm tracking-wider uppercase text-gray-500">
-          Benchmark&nbsp;results
+        <span className="text-sm uppercase text-gray-500">
+          Benchmark Results
         </span>
       </div>
-
       <dl className="grid grid-cols-2 gap-4 mb-4">
         {Object.entries(benchmark).map(([k, v]) => (
-          <div key={k} className="flex flex-col">
-            <dt className="text-[0.65rem] uppercase tracking-wider text-gray-500">
+          <div key={k}>
+            <dt className="text-[0.65rem] uppercase text-gray-500">
               {k.replace(/_/g, " ")}
             </dt>
             <dd className="text-lg font-semibold">{v}</dd>
           </div>
         ))}
       </dl>
-
-      {/* footer block for contract + hash */}
-      <div className="mt-4 text-xs text-gray-500 font-mono space-y-1 break-all">
-      <p>
-        <span className="uppercase text-[0.6rem] tracking-wide">Contract:</span>{" "}
-        <a
-          href={`https://etherscan.io/address/${reg_contract}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-700 hover:underline"
-        >
-          {reg_contract}
-        </a>
-      </p>
-      <p>
-        <span className="uppercase text-[0.6rem] tracking-wide">Hash:</span>{" "}
-        {benchmark_hash}
-      </p>
-    </div>
+      <div className="text-xs text-gray-500 font-mono space-y-1 break-all">
+        <p>
+          <span className="uppercase text-[0.6rem]">Contract:</span>{" "}
+          <a
+            href={`https://sepolia.etherscan.io/address/${reg_contract}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-700 hover:underline"
+          >
+            {reg_contract}
+          </a>
+        </p>
+        <p>
+          <span className="uppercase text-[0.6rem]">Hash:</span>{" "}
+          {benchmark_hash}
+        </p>
+      </div>
     </div>
   );
 }
 
+// --- Register GPU page ---
+function RegisterGPU({ account, signer, onAddRegistration }) {
+  const [uuid, setUuid] = useState("");
+  const [benchmark, setBenchmark] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-
-function RegisterGPU ({ account, signer, onAddRegistration }) {
-    const [uuid, setUuid] = useState("");
-    const [benchmark, setBenchmark] = useState("");
-    const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
-
-    const generateBenchmark = async () => {
-        setLoading(true);
-        const delay = new Promise(res => setTimeout(res, 5000));
-        await delay;
-        setLoading(false);
-
-        setUuid(Math.floor(Math.random() * 10000))
-        setBenchmark(getBenchmark())
-        console.log(uuid)
-        console.log(benchmark)
-    }
-
-    const handleSubmit = async () => {
-        if (!uuid || !benchmark) {
-          return alert("You must run benchmark first!");
-        }
-        try {
-          const regFactory = new ethers.ContractFactory(
-            GPURegistrationJSON.abi,
-            GPURegistrationJSON.bytecode,
-            signer
-          );
-          const regHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(benchmark)));
-          const regCtr = await regFactory.deploy(uuid.toString(), regHash);
-          await regCtr.waitForDeployment();
-
-
-          alert(
-            `✅ Deployed!\nRegistration: ${regCtr.target}`
-          );
-         onAddRegistration({reg_contract: regCtr.target, benchmark_hash: regHash, uuid, benchmark})
-          navigate("/mygpus");
-        } catch (err) {
-          if (err.code === "ACTION_REJECTED" || err.code === 4001) {
-            alert(" Transaction cancelled by user.");
-          } else {
-            console.error(err);
-            alert(" Deployment failed: " + (err.message || err));
-          }
-        }
+  const generateBenchmark = async () => {
+    setLoading(true);
+    await new Promise((res) => setTimeout(res, 3000));
+    const data = getBenchmark();
+    setBenchmark(data);
+    setUuid(`GPU-${Math.floor(Math.random() * 100000)}`);
+    setLoading(false);
   };
- return (
+
+  const handleSubmit = async () => {
+    if (!uuid || !benchmark) {
+      return alert("Run benchmark first!");
+    }
+    try {
+      const factory = new ethers.ContractFactory(
+        GPURegistrationJSON.abi,
+        GPURegistrationJSON.bytecode,
+        signer
+      );
+      const hash = ethers.keccak256(
+        ethers.toUtf8Bytes(JSON.stringify(benchmark))
+      );
+      const ctr = await factory.deploy(uuid, hash);
+      await ctr.waitForDeployment();
+      alert(`✅ Deployed!\nRegistration: ${ctr.target}`);
+      onAddRegistration({
+        reg_contract: ctr.target,
+        benchmark_hash: hash,
+        uuid,
+        benchmark,
+      });
+      navigate("/mygpus");
+    } catch (err) {
+      if (err.code === 4001) {
+        alert("Transaction cancelled");
+      } else {
+        console.error(err);
+        alert("Failed: " + err.message);
+      }
+    }
+  };
+
+  return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
-      <h2 className="text-3xl font-bold text-teal-700 mb-6">Register Your GPU</h2>
+      <h2 className="text-3xl font-bold text-teal-700 mb-6">
+        Register Your GPU
+      </h2>
       <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow space-y-4">
         {loading && (
-            <div className="flex flex-col items-center mt-8 gap-2">
-              <div className="w-12 h-12 border-4 border-blue-500
-                              border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-gray-400">Crunching numbers…</p>
-            </div>
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-gray-400 mt-2">Crunching data…</p>
+          </div>
         )}
-        {benchmark && !loading && <BenchmarkCard data={benchmark} uuid={uuid} />}
+        {!loading && benchmark && (
+          <BenchmarkCard data={benchmark} uuid={uuid} />
+        )}
         <button
-            onClick={generateBenchmark}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
-        >Run Benchmark
+          onClick={generateBenchmark}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+        >
+          Run Benchmark
         </button>
         <button
           onClick={handleSubmit}
@@ -312,67 +307,86 @@ function RegisterGPU ({ account, signer, onAddRegistration }) {
   );
 }
 
-// MyGPUs: View your GPUs and select one to sell.
+// --- My GPUs page: list registrations & allow “List for Sale” ---
 function MyGPUs({ account, signer, mygpus }) {
-  if (!mygpus || mygpus.length === 0) {
+  const navigate = useNavigate();
+
+  if (!mygpus.length) {
     return (
       <div className="mt-16 text-center text-gray-500">
-        <p className="text-lg">No GPUs registered to this wallet.</p>
-        <p className="text-sm">You can register one from the main menu.</p>
+        <p className="text-lg">No GPUs registered.</p>
+        <p className="text-sm">Use “Register Your GPU” above.</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
-      <h2 className="text-3xl font-bold text-teal-700 mb-6">Register Your GPU</h2>
-      <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow space-y-4"><div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {mygpus.map((gpu) => (
-        <GPUCard key={gpu.uuid ?? gpu.id} gpu={gpu} />
-      ))}
-    </div>
-    </div>
+      <h2 className="text-3xl font-bold text-teal-700 mb-6">My GPUs</h2>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {mygpus.map((gpu) => (
+          <div key={gpu.uuid} className="relative">
+            <GPUCard gpu={gpu} />
+            <button
+              onClick={() =>
+                navigate(
+                  `/sell?reg=${gpu.reg_contract}&uuid=${gpu.uuid}`
+                )
+              }
+              className="absolute top-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+            >
+              List for Sale
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 text-center">
+        <Link to="/" className="text-teal-600 hover:underline">
+          ← Back to Browse
+        </Link>
+      </div>
     </div>
   );
 }
 
-// Sell: deploy both contracts, then navigate home
+// --- Sell page: pre-fill & skip registration if params present ---
 function Sell({ account, signer, onAddListing }) {
-  const [uuid, setUuid] = useState("");
-  const [benchmark, setBenchmark] = useState("");
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const presetReg = params.get("reg");
+  const presetUuid = params.get("uuid");
+
+  const [uuid, setUuid] = useState(presetUuid || "");
   const [price, setPrice] = useState("");
   const commissionPerc = 1;
   const navigate = useNavigate();
 
   const handleSubmit = async () => {
-    if (!uuid || !benchmark || !price) {
-      return alert("Fill out UUID, benchmark, and price.");
+    if (!uuid || !price || !presetReg) {
+      return alert("UUID, registration address & price are required.");
     }
     try {
-      const listFactory = new ethers.ContractFactory(
+      const factory = new ethers.ContractFactory(
         GPUListingJSON.abi,
         GPUListingJSON.bytecode,
         signer
       );
-      const listingCtr = await listFactory.deploy(
+      const ctr = await factory.deploy(
         account,
         ethers.parseEther(price),
         commissionPerc,
-        regCtr.target
+        presetReg
       );
-      await listingCtr.waitForDeployment();
-
-      alert(
-        `✅ Deployed!\nRegistration: ${regCtr.target}\nListing: ${listingCtr.target}`
-      );
-      onAddListing({ uuid: listingCtr.target, price });
+      await ctr.waitForDeployment();
+      alert(`✅ Listing deployed at ${ctr.target}`);
+      onAddListing({ uuid: ctr.target, price });
       navigate("/");
     } catch (err) {
-      if (err.code === "ACTION_REJECTED" || err.code === 4001) {
-        alert(" Transaction cancelled by user.");
+      if (err.code === 4001) {
+        alert("Transaction cancelled");
       } else {
         console.error(err);
-        alert(" Deployment failed: " + (err.message || err));
+        alert("Deployment failed: " + err.message);
       }
     }
   };
@@ -381,28 +395,33 @@ function Sell({ account, signer, onAddListing }) {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
       <h2 className="text-3xl font-bold text-teal-700 mb-6">Sell Your GPU</h2>
       <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow space-y-4">
+        {presetReg && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium">Registration</label>
+            <code className="block text-xs text-gray-600 break-all">
+              {presetReg}
+            </code>
+          </div>
+        )}
         <input
-          placeholder="GPU UUID (e.g. GPU-1234)"
+          type="text"
+          placeholder="GPU UUID"
           value={uuid}
           onChange={(e) => setUuid(e.target.value)}
-          className="border p-2 rounded w-full"
+          disabled={!!presetUuid}
+          className="w-full border rounded-lg px-3 py-2"
         />
         <input
-          placeholder="Benchmark Data"
-          value={benchmark}
-          onChange={(e) => setBenchmark(e.target.value)}
-          className="border p-2 rounded w-full"
-        />
-        <input
+          type="number"
           placeholder="Price (ETH)"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
-          className="border p-2 rounded w-full"
+          className="w-full border rounded-lg px-3 py-2"
         />
-        <div className="text-gray-600">Commission: {commissionPerc}%</div>
+        <p className="text-gray-600">Commission: {commissionPerc}%</p>
         <button
           onClick={handleSubmit}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
         >
           Deploy Listing
         </button>
@@ -416,70 +435,96 @@ function Sell({ account, signer, onAddListing }) {
   );
 }
 
-// ListingDetail: fetch on-chain and allow approvals
+// --- Listing Details page ---
 function ListingDetail({ signer }) {
   const { address } = useParams();
-  const [ctr, setCtr] = useState(null);
-  const [info, setInfo] = useState({
+  const [listingCtr, setListingCtr] = useState(null);
+  const [details, setDetails] = useState({
     seller: "",
     arbiter: "",
     buyer: "",
     deposited: false,
     releaseCount: 0,
     refundCount: 0,
+    uuid: "",
+    owners: [],
+    hashes: [],
   });
 
   useEffect(() => {
     if (!signer) return;
-    const c = new ethers.Contract(address, GPUListingJSON.abi, signer);
-    setCtr(c);
+    const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
+    setListingCtr(ctr);
+
     (async () => {
-      const [s, a, b, d, r, f] = await Promise.all([
-        c.seller(),
-        c.arbiter(),
-        c.buyer(),
-        c.deposited(),
-        c.release_ApprovalCount(),
-        c.refund_ApprovalCount(),
-      ]);
-      setInfo({
-        seller: s,
-        arbiter: a,
-        buyer: b,
-        deposited: d,
-        releaseCount: r,
-        refundCount: f,
+      // fetch listing data + registration address
+      const [seller, arbiter, buyer, deposited, rc, fc, regAddr] =
+        await Promise.all([
+          ctr.seller(),
+          ctr.arbiter(),
+          ctr.buyer(),
+          ctr.deposited(),
+          ctr.release_ApprovalCount(),
+          ctr.refund_ApprovalCount(),
+          ctr.gpu_registration(),
+        ]);
+
+      // fetch registration details
+      const regCtr = new ethers.Contract(
+        regAddr,
+        GPURegistrationJSON.abi,
+        signer
+      );
+      const [uuid, owners, hashes] = await regCtr.getDetails();
+
+      setDetails({
+        seller,
+        arbiter,
+        buyer,
+        deposited,
+        releaseCount: rc,
+        refundCount: fc,
+        uuid,
+        owners,
+        hashes,
       });
     })();
   }, [signer, address]);
 
   const refresh = async () => {
-    const d = await ctr.deposited();
-    const r = await ctr.release_ApprovalCount();
-    const f = await ctr.refund_ApprovalCount();
-    setInfo((i) => ({ ...i, deposited: d, releaseCount: r, refundCount: f }));
+    const d = await listingCtr.deposited();
+    const rc = await listingCtr.release_ApprovalCount();
+    const fc = await listingCtr.refund_ApprovalCount();
+    setDetails((prev) => ({
+      ...prev,
+      deposited: d,
+      releaseCount: rc,
+      refundCount: fc,
+    }));
   };
 
   const approve = async (fn) => {
-    const tx = await ctr[fn]();
+    const tx = await listingCtr[fn]();
     await tx.wait();
-    alert(`✅ ${fn} OK`);
     await refresh();
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
         <div className="px-8 py-6">
           <h2 className="text-3xl font-bold mb-4">Listing Details</h2>
+
           {[
             ["Contract", address],
-            ["Seller", info.seller],
-            ["Arbiter", info.arbiter],
-            ["Buyer", info.buyer],
-          ].map(([lab, val]) => (
-            <div className="flex" key={lab}>
-              <span className="w-32 font-medium">{lab}:</span>
+            ["Seller", details.seller],
+            ["Arbiter", details.arbiter],
+            ["Buyer", details.buyer],
+            ["UUID", details.uuid],
+          ].map(([label, val]) => (
+            <div className="flex" key={label}>
+              <span className="w-32 font-medium">{label}:</span>
               <span className="break-all">{val}</span>
             </div>
           ))}
@@ -488,42 +533,63 @@ function ListingDetail({ signer }) {
             <span className="w-32 font-medium">Deposited:</span>
             <span
               className={`px-2 py-1 rounded-full text-sm font-semibold ${
-                info.deposited ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                details.deposited
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
               }`}
             >
-              {info.deposited ? "Yes" : "No"}
+              {details.deposited ? "Yes" : "No"}
             </span>
           </div>
+
           <div className="flex items-center mt-2">
             <span className="w-32 font-medium">Release Approvals:</span>
             <span className="px-2 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-              {info.releaseCount}
+              {details.releaseCount}
             </span>
           </div>
+
           <div className="flex items-center mt-2">
             <span className="w-32 font-medium">Refund Approvals:</span>
             <span className="px-2 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800">
-              {info.refundCount}
+              {details.refundCount}
             </span>
           </div>
 
           <div className="mt-6 space-x-4">
             <button
               onClick={() => approve("approveRelease")}
-              disabled={!info.deposited}
+              disabled={!details.deposited}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Approve Release
             </button>
             <button
               onClick={() => approve("approveRefund")}
-              disabled={!info.deposited}
+              disabled={!details.deposited}
               className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Approve Refund
             </button>
           </div>
         </div>
+
+        <div className="mt-8 bg-white p-6 rounded-lg shadow">
+          <h3 className="text-xl font-semibold mb-4">Ownership History</h3>
+          <ul className="list-disc list-inside">
+            {details.owners.map((owner, i) => (
+              <li key={i} className="break-all">{owner}</li>
+            ))}
+          </ul>
+
+          <h3 className="text-xl font-semibold mt-6 mb-4">Benchmark Hashes</h3>
+          <ul className="list-disc list-inside font-mono text-sm">
+            {details.hashes.map((h, i) => (
+              <li key={i}>{h}</li>
+            ))}
+          </ul>
+        </div>
+
         <div className="px-8 py-4 bg-gray-100 text-center">
           <Link to="/" className="text-teal-600 hover:underline">
             ← Back to Browse
@@ -534,12 +600,12 @@ function ListingDetail({ signer }) {
   );
 }
 
-// Main App
+// --- Main App ---
 export default function App() {
   const [account, setAccount] = useState(null);
   const [signer, setSigner] = useState(null);
-  const [listed_gpus, setListedGpus] = useState([]);
-  const [registered_gpus, setRegisteredGpus] = useState([]);
+  const [listedGpus, setListedGpus] = useState([]);
+  const [registeredGpus, setRegisteredGpus] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -553,11 +619,11 @@ export default function App() {
   }, []);
 
   const addListing = ({ uuid, price }) => {
-    setListedGpus((prev) => [...prev, { uuid, price }]);
+    setListedGpus(prev => [...prev, { uuid, price }]);
   };
 
-  const addRegistration = ({reg_contract, regHash, uuid, benchmark}) => {
-    setRegisteredGpus((prev) => [...prev, { reg_contract, regHash, uuid, benchmark}]);
+  const addRegistration = ({ reg_contract, benchmark_hash, uuid, benchmark }) => {
+    setRegisteredGpus(prev => [...prev, { reg_contract, benchmark_hash, uuid, benchmark }]);
   };
 
   const handleDeposit = async (amount, addr) => {
@@ -567,11 +633,11 @@ export default function App() {
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
     } catch (err) {
-      if (err.code === "ACTION_REJECTED" || err.code === 4001) {
-        alert(" Deposit cancelled by user.");
+      if (err.code === 4001) {
+        alert("Deposit cancelled");
       } else {
         console.error(err);
-        alert(" Deposit failed: " + (err.message || err));
+        alert("Deposit failed: " + err.message);
       }
     }
   };
@@ -584,25 +650,46 @@ export default function App() {
           element={
             <Home
               account={account}
-              gpus={listed_gpus}
+              gpus={listedGpus}
               handleDeposit={handleDeposit}
               onSwitchSepolia={ensureSepolia}
             />
           }
         />
         <Route
-            path="/register"
-            element={<RegisterGPU account={account} signer={signer} onAddRegistration={addRegistration} />}
+          path="/register"
+          element={
+            <RegisterGPU
+              account={account}
+              signer={signer}
+              onAddRegistration={addRegistration}
+            />
+          }
         />
         <Route
-            path="/mygpus"
-            element={<MyGPUs account={account} signer={signer} mygpus={registered_gpus} />}
+          path="/mygpus"
+          element={
+            <MyGPUs
+              account={account}
+              signer={signer}
+              mygpus={registeredGpus}
+            />
+          }
         />
         <Route
           path="/sell"
-          element={<Sell account={account} signer={signer} onAddListing={addListing} />}
+          element={
+            <Sell
+              account={account}
+              signer={signer}
+              onAddListing={addListing}
+            />
+          }
         />
-        <Route path="/listing/:address" element={<ListingDetail signer={signer} />} />
+        <Route
+          path="/listing/:address"
+          element={<ListingDetail signer={signer} />}
+        />
       </Routes>
     </Router>
   );
