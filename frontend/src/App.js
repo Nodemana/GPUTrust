@@ -21,7 +21,8 @@ import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
-
+import { FaGavel } from "react-icons/fa";
+const ARBITER_ADDRESS = '0x990e69DDf6a9f0F04C456aD9c6067ac2Be6d8Ff9'
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -79,26 +80,34 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
           <p className="text-gray-600 mb-6">
             Secure, trustless GPU trading on the Sepolia testnet.
           </p>
-          <Link
-            to="/mygpus"
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center mr-4"
-          >
-            <PiGraphicsCardFill className="mr-2" /> My GPUs
-          </Link>
-          <Link
-            to="/register"
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center mr-4"
-          >
-            <FaClipboardList className="mr-2" /> Register Your GPU
-          </Link>
-          <Link
-            to="/sell"
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg shadow inline-flex items-center"
-          >
-            <FaPlusCircle className="mr-2" /> Sell Your GPU
-          </Link>
+          <div className="flex flex-wrap gap-4">
+            <Link
+              to="/mygpus"
+              className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded shadow inline-flex items-center"
+            >
+              <PiGraphicsCardFill className="mr-2" /> My GPUs
+            </Link>
+            <Link
+              to="/arbitration"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded shadow inline-flex items-center"
+            >
+              <FaGavel className="mr-2" /> Arbitration
+            </Link>
+            <Link
+              to="/register"
+              className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded shadow inline-flex items-center"
+            >
+              <FaClipboardList className="mr-2" /> Register Your GPU
+            </Link>
+            <Link
+              to="/sell"
+              className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded shadow inline-flex items-center"
+            >
+              <FaPlusCircle className="mr-2" /> Sell Your GPU
+            </Link>
+          </div>
         </div>
-        <FaShoppingCart className="text-teal-600 text-9xl opacity-20 mt-6 md:mt-0" />
+        <FaShoppingCart className="text-teal-600 text-9xl opacity-20 mt-8 md:mt-0" />
       </section>
 
       <section id="listings" className="max-w-6xl mx-auto">
@@ -126,9 +135,8 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
                   <button
                     onClick={() => valid && handleDeposit(price, uuid)}
                     disabled={!valid}
-                    className={`py-2 px-4 rounded text-white ${
-                      valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
-                    }`}
+                    className={`py-2 px-4 rounded text-white ${valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
+                      }`}
                   >
                     Buy Now
                   </button>
@@ -151,7 +159,102 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
     </div>
   );
 }
+function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
+  const [onChainDisputes, setOnChainDisputes] = useState([]);
 
+  useEffect(() => {
+    if (!signer) return;
+    (async () => {
+      const out = [];
+      for (let { uuid: address } of listedGpus) {
+        const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
+        const arb = await ctr.arbiter();
+        const deposited = await ctr.deposited();
+        if (
+          arb.toLowerCase() === ARBITER_ADDRESS.toLowerCase() &&
+          deposited
+        ) {
+          const r = await ctr.release_ApprovalCount();
+          const f = await ctr.refund_ApprovalCount();
+          if (r > 0 && f > 0) out.push(address);
+        }
+      }
+      setOnChainDisputes(out);
+    })();
+  }, [signer, listedGpus]);
+
+  const allDisputes = Array.from(
+    new Set([...onChainDisputes, ...raisedDisputes])
+  );
+
+  const handleApprove = async (address, method) => {
+    try {
+      const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
+      const tx = await ctr[method]();
+      await tx.wait();
+      alert(`✅ ${method} succeeded on ${address}`);
+    } catch (err) {
+      console.error(err);
+      alert(`❌ ${method} failed: ${err.message || err}`);
+    }
+  };
+
+  if (account?.toLowerCase() !== ARBITER_ADDRESS.toLowerCase()) {
+    return (
+      <div className="p-8 text-center text-red-600">
+        Access denied: not the arbiter.
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8 font-sans">
+      <h2 className="text-3xl font-bold mb-6">Arbitration Dashboard</h2>
+      {allDisputes.length === 0 ? (
+        <p className="text-gray-600">No active disputes.</p>
+      ) : (
+        <div className="space-y-4">
+          {allDisputes.map((addr) => (
+            <div
+              key={addr}
+              className="bg-white p-4 rounded shadow flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0"
+            >
+              <span className="break-all font-mono">{addr}</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleApprove(addr, "approveRelease")}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                >
+                  Approve Release
+                </button>
+                <button
+                  onClick={() => handleApprove(addr, "approveRefund")}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                >
+                  Approve Refund
+                </button>
+                <button
+                  onClick={() =>
+                    alert("📄 Stakeholders Dispute Policy sent (stub).")
+                  }
+                  className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded inline-flex items-center"
+                >
+                  <FaGavel className="mr-2" />
+                  Send Dispute Policy
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-8">
+        <Link to="/" className="text-teal-600 hover:underline">
+          ← Back to Browse
+        </Link>
+      </div>
+    </div>
+  );
+}
 // --- Benchmark & GPU Cards ---
 function BenchmarkCard({ data, uuid }) {
   return (
@@ -436,8 +539,9 @@ function Sell({ account, signer, onAddListing }) {
 }
 
 // --- Listing Details page ---
-function ListingDetail({ signer }) {
+function ListingDetail({ signer, handleRaiseDispute }) {
   const { address } = useParams();
+  const navigate = useNavigate();
   const [listingCtr, setListingCtr] = useState(null);
   const [details, setDetails] = useState({
     seller: "",
@@ -532,11 +636,10 @@ function ListingDetail({ signer }) {
           <div className="flex items-center mt-4">
             <span className="w-32 font-medium">Deposited:</span>
             <span
-              className={`px-2 py-1 rounded-full text-sm font-semibold ${
-                details.deposited
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-              }`}
+              className={`px-2 py-1 rounded-full text-sm font-semibold ${details.deposited
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
+                }`}
             >
               {details.deposited ? "Yes" : "No"}
             </span>
@@ -560,16 +663,21 @@ function ListingDetail({ signer }) {
             <button
               onClick={() => approve("approveRelease")}
               disabled={!details.deposited}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              title="Confirm that the GPU has been delivered"
             >
-              Approve Release
+              Confirm Completion
             </button>
             <button
-              onClick={() => approve("approveRefund")}
+              onClick={() => {
+                handleRaiseDispute(address);
+                navigate("/arbitration");
+              }}
               disabled={!details.deposited}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              title="Raise a dispute with the arbiter"
             >
-              Approve Refund
+              Raise Dispute
             </button>
           </div>
         </div>
@@ -606,6 +714,7 @@ export default function App() {
   const [signer, setSigner] = useState(null);
   const [listedGpus, setListedGpus] = useState([]);
   const [registeredGpus, setRegisteredGpus] = useState([]);
+  const [disputes, setDisputes] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -617,7 +726,11 @@ export default function App() {
       setAccount(await s.getAddress());
     })();
   }, []);
-
+  const handleRaiseDispute = (address) => {
+    setDisputes(prev =>
+      prev.includes(address) ? prev : [...prev, address]
+    );
+  };
   const addListing = ({ uuid, price }) => {
     setListedGpus(prev => [...prev, { uuid, price }]);
   };
@@ -633,12 +746,28 @@ export default function App() {
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
     } catch (err) {
-      if (err.code === 4001) {
-        alert("Deposit cancelled");
-      } else {
-        console.error(err);
-        alert("Deposit failed: " + err.message);
+      // MetaMask / RPC error codes
+      const code = err.code ?? err.error?.code;
+      const msg = err.message ?? err.error?.message ?? "";
+
+      // insufficient funds for gas * price + value
+      if (code === -32003 || /insufficient funds/i.test(msg)) {
+        alert(
+          "❌ Deposit failed: You don’t have enough Sepolia ETH in your wallet.\n" +
+          "Please get some from a Sepolia faucet and try again."
+        );
+        return;
       }
+
+      // user explicitly rejected the tx
+      if (code === 4001 || code === "ACTION_REJECTED") {
+        alert("⚠️ Deposit cancelled by user.");
+        return;
+      }
+
+      // fallback for any other error
+      console.error(err);
+      alert(" Deposit failed: " + (msg || err));
     }
   };
 
@@ -687,8 +816,26 @@ export default function App() {
           }
         />
         <Route
+          path="/arbitration"
+          element={
+            <ArbiterDashboard
+              signer={signer}
+              listedGpus={listedGpus}
+              raisedDisputes={disputes}
+              account={account}
+            />
+          }
+        />
+
+        <Route
           path="/listing/:address"
-          element={<ListingDetail signer={signer} />}
+          element={
+            <ListingDetail
+              signer={signer}
+              account={account}
+              handleRaiseDispute={handleRaiseDispute}
+            />
+          }
         />
       </Routes>
     </Router>
