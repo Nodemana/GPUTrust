@@ -21,8 +21,16 @@ import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
+import { useState, useRef, useCallback } from "react";
+import {
+  GoogleMap,
+  Marker,
+  useJsApiLoader,
+  Autocomplete,
+} from "@react-google-maps/api";
+import PropTypes from "prop-types";
 import { FaGavel } from "react-icons/fa";
-const ARBITER_ADDRESS = '0x990e69DDf6a9f0F04C456aD9c6067ac2Be6d8Ff9'
+const ARBITER_ADDRESS = ''
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
