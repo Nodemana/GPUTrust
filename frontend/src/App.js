@@ -1,5 +1,5 @@
 // src/App.js
-import { useEffect, useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -21,7 +21,7 @@ import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
-import { useState, useRef, useCallback } from "react";
+
 import {
   GoogleMap,
   Marker,
@@ -30,7 +30,10 @@ import {
 } from "@react-google-maps/api";
 import PropTypes from "prop-types";
 import { FaGavel } from "react-icons/fa";
-const ARBITER_ADDRESS = ''
+
+// Constants
+const ARBITER_ADDRESS = '0x39F2AFceA04a400BA3523438DbB88119fa1a44d6'
+
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -484,7 +487,7 @@ function Sell({ account, signer, onAddListing }) {
       );
       const ctr = await factory.deploy(
         account,
-        ethers.parseEther(price),
+        ethers.parseEther(Math.floor(price*Math.pow(10, 18))), // Price in wei
         commissionPerc,
         presetReg
       );
