@@ -21,14 +21,7 @@ import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
-import { useState, useRef, useCallback } from "react";
-import {
-  GoogleMap,
-  Marker,
-  useJsApiLoader,
-  Autocomplete,
-} from "@react-google-maps/api";
-import PropTypes from "prop-types";
+import ShippingAndMap from "./components/ShippingAndMap";
 import { FaGavel } from "react-icons/fa";
 const ARBITER_ADDRESS = ''
 // --- switch MetaMask to Sepolia ---
@@ -67,19 +60,38 @@ async function ensureSepolia() {
     return false;
   }
 }
-
+export async function geocodeAddress(address) {
+  // For now just return a fixed location if address matches our example
+  if (address.includes("Mountain View")) {
+    return { lat: 37.4221, lng: -122.0841 };
+  }
+  // Fallback: return null or a default
+  return null;
+}
 // --- Home page ---
-function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
+function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
-      <header className="flex justify-between items-center mb-8">
-        <button
-          onClick={onSwitchSepolia}
-          className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          <FaSyncAlt className="mr-2" /> Sepolia
-        </button>
-        <span className="text-gray-600">{account || "Not connected"}</span>
+      <header className="bg-white shadow-md rounded-lg px-6 py-4 flex flex-col md:flex-row justify-between items-center mb-8 space-y-4 md:space-y-0">
+        <div className="flex space-x-3">
+          <button
+            onClick={onSwitchSepolia}
+            className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition"
+          >
+            <FaSyncAlt className="mr-2" /> Sepolia
+          </button>
+          <button
+            onClick={onSwitchWallet}
+            className="flex items-center bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-md transition"
+          >
+            Switch Wallet
+          </button>
+        </div>
+        <div className="flex items-center space-x-3">
+          <span className="font-mono text-gray-700 truncate max-w-xs">
+            {account || "Not connected"}
+          </span>
+        </div>
       </header>
 
       <section className="flex flex-col md:flex-row justify-between items-center bg-white p-8 rounded-lg shadow-md mb-12">
@@ -148,6 +160,7 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia }) {
                   >
                     Buy Now
                   </button>
+
                   {valid ? (
                     <Link
                       to={`/listing/${uuid}`}
@@ -550,6 +563,8 @@ function Sell({ account, signer, onAddListing }) {
 function ListingDetail({ signer, handleRaiseDispute }) {
   const { address } = useParams();
   const navigate = useNavigate();
+  const [sellerLoc, setSellerLoc] = useState(null);
+  const [buyerAddress, setBuyerAddress] = useState(null);
   const [listingCtr, setListingCtr] = useState(null);
   const [details, setDetails] = useState({
     seller: "",
@@ -603,6 +618,12 @@ function ListingDetail({ signer, handleRaiseDispute }) {
     })();
   }, [signer, address]);
 
+  useEffect(() => {
+    if (!details.seller) return;
+    geocodeAddress(details.seller).then((pos) => {
+      setSellerLoc(pos);
+    });
+  }, [details.seller]);
   const refresh = async () => {
     const d = await listingCtr.deposited();
     const rc = await listingCtr.release_ApprovalCount();
@@ -652,7 +673,13 @@ function ListingDetail({ signer, handleRaiseDispute }) {
               {details.deposited ? "Yes" : "No"}
             </span>
           </div>
-
+          <section className="mt-8">
+            <h3 className="text-xl font-semibold mb-4">Shipping Info</h3>
+            <ShippingAndMap
+              sellerLocation={sellerLoc}
+              onBuyerAddress={(addr, pos) => setBuyerAddress({ addr, pos })}
+            />
+          </section>
           <div className="flex items-center mt-2">
             <span className="w-32 font-medium">Release Approvals:</span>
             <span className="px-2 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
@@ -723,13 +750,16 @@ export default function App() {
   const [listedGpus, setListedGpus] = useState([]);
   const [registeredGpus, setRegisteredGpus] = useState([]);
   const [disputes, setDisputes] = useState([]);
-
+  const [provider, setProvider] = useState(null);
   useEffect(() => {
     (async () => {
       if (!(await ensureSepolia())) return;
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      const s = await provider.getSigner();
+      const p = new ethers.BrowserProvider(window.ethereum);
+      setProvider(p);
+
+      // prompt once
+      await p.send("eth_requestAccounts", []);
+      const s = await p.getSigner();
       setSigner(s);
       setAccount(await s.getAddress());
     })();
@@ -738,6 +768,32 @@ export default function App() {
     setDisputes(prev =>
       prev.includes(address) ? prev : [...prev, address]
     );
+  };
+  const switchWallet = async () => {
+    if (!window.ethereum) {
+      alert("🦊 Please install MetaMask");
+      return;
+    }
+    try {
+      // ask MetaMask to re-request account permissions
+      await window.ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+
+      // now prompt the user to pick an account
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const newProvider = new ethers.BrowserProvider(window.ethereum);
+      const newSigner = await newProvider.getSigner();
+      setProvider(newProvider);
+      setSigner(newSigner);
+      setAccount(accounts[0]);
+    } catch (err) {
+      console.error(err);
+      alert("Could not switch wallet: " + (err.message || err));
+    }
   };
   const addListing = ({ uuid, price }) => {
     setListedGpus(prev => [...prev, { uuid, price }]);
@@ -789,6 +845,7 @@ export default function App() {
               account={account}
               gpus={listedGpus}
               handleDeposit={handleDeposit}
+              onSwitchWallet={switchWallet}
               onSwitchSepolia={ensureSepolia}
             />
           }
