@@ -20,10 +20,11 @@ import { PiGraphicsCardFill } from "react-icons/pi";
 import { ethers } from "ethers";
 import GPUListingJSON from "./contracts/GPUListing.json";
 import GPURegistrationJSON from "./contracts/GPURegistration.json";
+
 import getBenchmark from "./utils.js";
 import ShippingAndMap from "./components/ShippingAndMap";
 import { FaGavel } from "react-icons/fa";
-const ARBITER_ADDRESS = ''
+const ARBITER_ADDRESS = '0x32Ce567764bE7395aE8B6Ba2Bf90870d4762D0dB'
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -70,6 +71,8 @@ export async function geocodeAddress(address) {
 }
 // --- Home page ---
 function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet }) {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
       <header className="bg-white shadow-md rounded-lg px-6 py-4 flex flex-col md:flex-row justify-between items-center mb-8 space-y-4 md:space-y-0">
@@ -153,14 +156,17 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
                 </div>
                 <div className="mt-4 flex items-center justify-between">
                   <button
-                    onClick={() => valid && handleDeposit(price, uuid)}
+                    onClick={async () => {
+                      if (!valid) return;
+                      await handleDeposit(price, uuid);
+                      navigate("/mygpus");
+                    }}
                     disabled={!valid}
                     className={`py-2 px-4 rounded text-white ${valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
                       }`}
                   >
                     Buy Now
                   </button>
-
                   {valid ? (
                     <Link
                       to={`/listing/${uuid}`}
@@ -354,7 +360,7 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
 
   const generateBenchmark = async () => {
     setLoading(true);
-    await new Promise((res) => setTimeout(res, 3000));
+    await new Promise((r) => setTimeout(r, 3000));
     const data = getBenchmark();
     setBenchmark(data);
     setUuid(`GPU-${Math.floor(Math.random() * 100000)}`);
@@ -377,6 +383,7 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
       const ctr = await factory.deploy(uuid, hash);
       await ctr.waitForDeployment();
       alert(`✅ Deployed!\nRegistration: ${ctr.target}`);
+      // push into our per-wallet map
       onAddRegistration({
         reg_contract: ctr.target,
         benchmark_hash: hash,
@@ -432,38 +439,61 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
 }
 
 // --- My GPUs page: list registrations & allow “List for Sale” ---
-function MyGPUs({ account, signer, mygpus }) {
+function MyGPUs({ account, registeredGpusMap, benchmarks }) {
   const navigate = useNavigate();
+  const mygpus = registeredGpusMap[account] || [];
 
-  if (!mygpus.length) {
+  if (mygpus.length === 0) {
     return (
-      <div className="mt-16 text-center text-gray-500">
-        <p className="text-lg">No GPUs registered.</p>
-        <p className="text-sm">Use “Register Your GPU” above.</p>
+      <div className="min-h-screen flex flex-col justify-center items-center bg-gradient-to-b from-gray-50 to-white p-8">
+        <p className="text-2xl text-gray-600 mb-4">No GPUs found</p>
+        <p className="text-gray-500 mb-8">Register one or purchase from the market.</p>
+        <Link
+          to="/"
+          className="inline-block bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded transition"
+        >
+          ← Back to Browse
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white p-8 font-sans">
-      <h2 className="text-3xl font-bold text-teal-700 mb-6">My GPUs</h2>
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {mygpus.map((gpu) => (
-          <div key={gpu.uuid} className="relative">
-            <GPUCard gpu={gpu} />
-            <button
-              onClick={() =>
-                navigate(
-                  `/sell?reg=${gpu.reg_contract}&uuid=${gpu.uuid}`
-                )
-              }
-              className="absolute top-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+      <h2 className="text-3xl font-bold text-teal-700 mb-8">My GPUs</h2>
+      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        {mygpus.map((gpu) => {
+          // look up the full benchmark object by its hash
+          const fullBench = benchmarks[gpu.benchmark_hash] || {};
+          return (
+            <div
+              key={gpu.uuid}
+              className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col"
             >
-              List for Sale
-            </button>
-          </div>
-        ))}
+              {/* pass the enriched GPU object into your existing GPUCard */}
+              <GPUCard
+                gpu={{
+                  ...gpu,
+                  benchmark: fullBench
+                }}
+              />
+
+              {/* Footer with action */}
+              <div className="p-4 bg-gray-50 flex justify-end">
+                <button
+                  onClick={() =>
+                    navigate(`/sell?reg=${gpu.reg_contract}&uuid=${gpu.uuid}`)
+                  }
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition"
+                >
+                  List for Sale
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
       <div className="mt-8 text-center">
         <Link to="/" className="text-teal-600 hover:underline">
           ← Back to Browse
@@ -472,18 +502,17 @@ function MyGPUs({ account, signer, mygpus }) {
     </div>
   );
 }
-
 // --- Sell page: pre-fill & skip registration if params present ---
 function Sell({ account, signer, onAddListing }) {
   const { search } = useLocation();
   const params = new URLSearchParams(search);
-  const presetReg = params.get("reg");
+  const presetReg  = params.get("reg");
   const presetUuid = params.get("uuid");
 
-  const [uuid, setUuid] = useState(presetUuid || "");
+  const [uuid, setUuid]   = useState(presetUuid || "");
   const [price, setPrice] = useState("");
-  const commissionPerc = 1;
-  const navigate = useNavigate();
+  const commissionPerc    = 1;
+  const navigate          = useNavigate();
 
   const handleSubmit = async () => {
     if (!uuid || !price || !presetReg) {
@@ -495,8 +524,9 @@ function Sell({ account, signer, onAddListing }) {
         GPUListingJSON.bytecode,
         signer
       );
+      // note the order: seller, arbiter, price, commission, registration
       const ctr = await factory.deploy(
-        account,
+        ARBITER_ADDRESS,
         ethers.parseEther(price),
         commissionPerc,
         presetReg
@@ -748,8 +778,9 @@ export default function App() {
   const [account, setAccount] = useState(null);
   const [signer, setSigner] = useState(null);
   const [listedGpus, setListedGpus] = useState([]);
-  const [registeredGpus, setRegisteredGpus] = useState([]);
+  const [myGpusMap, setMyGpusMap] = useState({});
   const [disputes, setDisputes] = useState([]);
+  const [benchmarks, setBenchmarks] = useState({});
   const [provider, setProvider] = useState(null);
   useEffect(() => {
     (async () => {
@@ -799,16 +830,51 @@ export default function App() {
     setListedGpus(prev => [...prev, { uuid, price }]);
   };
 
-  const addRegistration = ({ reg_contract, benchmark_hash, uuid, benchmark }) => {
-    setRegisteredGpus(prev => [...prev, { reg_contract, benchmark_hash, uuid, benchmark }]);
+  const addRegistration = (gpu) => {
+
+    setBenchmarks(prev => ({
+      ...prev,
+      [gpu.benchmark_hash]: gpu.benchmark
+    }));
+
+    setMyGpusMap(prev => ({
+      ...prev,
+      [account]: [
+        ...(prev[account] || []),
+        {
+          uuid: gpu.uuid,
+          reg_contract: gpu.reg_contract,
+          benchmark_hash: gpu.benchmark_hash,
+        }
+      ]
+    }));
   };
 
   const handleDeposit = async (amount, addr) => {
     try {
       const ctr = new ethers.Contract(addr, GPUListingJSON.abi, signer);
       const tx = await ctr.deposit({ value: ethers.parseEther(amount) });
+      const regAddress = await ctr.gpu_registration();
+      const regCtr = new ethers.Contract(regAddress, GPURegistrationJSON.abi, signer);
+      const [uuid, , hashes] = await regCtr.getDetails();
+      const mostRecentHash = hashes[hashes.length - 1];
+
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
+
+      // ← NEW: record ownership on‐chain locally
+      setMyGpusMap(prev => ({
+        ...prev,
+        [account]: [
+          ...(prev[account] || []),
+          {
+            uuid,
+            reg_contract: regAddress,
+            benchmark_hash: mostRecentHash,
+            price: amount
+          }
+        ]
+      }));
     } catch (err) {
       // MetaMask / RPC error codes
       const code = err.code ?? err.error?.code;
@@ -866,7 +932,8 @@ export default function App() {
             <MyGPUs
               account={account}
               signer={signer}
-              mygpus={registeredGpus}
+              registeredGpusMap={myGpusMap}
+              benchmarks={benchmarks}
             />
           }
         />
