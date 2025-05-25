@@ -70,7 +70,7 @@ export async function geocodeAddress(address) {
   return null;
 }
 // --- Home page ---
-function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet }) {
+function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet, soldMap }) {
   const navigate = useNavigate();
 
   return (
@@ -136,11 +136,13 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
       <section id="listings" className="max-w-6xl mx-auto">
         <h3 className="text-2xl font-semibold mb-6">Latest Listings</h3>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {gpus.map(({ uuid, price }) => {
-            const valid = ethers.isAddress(uuid);
+          {gpus.map(({ uuid, price, contract }) => {
+            const valid = ethers.isAddress(contract);
+              const isSold = soldMap[contract];
+              const isReady = contract in soldMap;
             return (
               <div
-                key={uuid}
+                key={contract}
                 className="bg-white p-6 rounded shadow flex flex-col justify-between"
               >
                 <div>
@@ -155,21 +157,25 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
                   </p>
                 </div>
                 <div className="mt-4 flex items-center justify-between">
-                  <button
-                    onClick={async () => {
-                      if (!valid) return;
-                      await handleDeposit(price, uuid);
-                      navigate("/mygpus");
-                    }}
-                    disabled={!valid}
-                    className={`py-2 px-4 rounded text-white ${valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
-                      }`}
-                  >
-                    Buy Now
-                  </button>
+                <button
+                  onClick={async () => {
+                    if (!valid || isSold) return;
+                    await handleDeposit(price, contract); 
+                    navigate("/mygpus");
+                  }}
+                  disabled={!valid || !isReady || isSold}
+                  className={`py-2 px-4 rounded text-white ${
+                    !valid || !isReady || isSold
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-teal-500 hover:bg-teal-600"
+                  }`}
+                >
+                  {!isReady ? "Checking..." : isSold ? "Sold Out" : "Buy Now"}
+                </button>
+
                   {valid ? (
                     <Link
-                      to={`/listing/${uuid}`}
+                      to={`/listing/${contract}`}
                       className="text-teal-600 hover:underline ml-4"
                     >
                       Details
@@ -181,6 +187,7 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
               </div>
             );
           })}
+
         </div>
       </section>
     </div>
@@ -441,7 +448,7 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
 }
 
 // --- My GPUs page: list registrations & allow “List for Sale” ---
-function MyGPUs({ account, registeredGpusMap, benchmarks }) {
+function MyGPUs({ account, registeredGpusMap, benchmarks, listedGpus }) {
   const navigate = useNavigate();
   const mygpus = registeredGpusMap[account] || [];
 
@@ -482,15 +489,28 @@ function MyGPUs({ account, registeredGpusMap, benchmarks }) {
 
               {/* Footer with action */}
               <div className="p-4 bg-gray-50 flex justify-end">
-                <button
-                  onClick={() =>
-                    navigate(`/sell?reg=${gpu.reg_contract}&uuid=${gpu.uuid}`)
-                  }
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition"
-                >
-                  List for Sale
-                </button>
-              </div>
+          {
+            listedGpus?.some(l => l.uuid === gpu.uuid) ? (
+              <button
+                disabled
+                className="bg-gray-400 text-white px-4 py-2 rounded-md cursor-not-allowed"
+                title="Already listed for sale"
+              >
+                Listed
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  navigate(`/sell?reg=${gpu.reg_contract}&uuid=${gpu.uuid}`)
+                }
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition"
+              >
+                List for Sale
+              </button>
+            )
+          }
+        </div>
+
             </div>
           );
         })}
@@ -520,7 +540,7 @@ function Sell({ account, signer, onAddListing, listedGpus}) {
     if (!uuid || !price || !presetReg) {
       return alert("UUID, registration address & price are required.");
     }
-    const alreadyListed = listedGpus.some(gpu => gpu.uuid === uuid);
+    const alreadyListed = listedGpus.some(l => l.uuid === uuid);
       if (alreadyListed) {
         alert("This GPU is already listed for sale.");
         return;
@@ -540,7 +560,7 @@ function Sell({ account, signer, onAddListing, listedGpus}) {
       );
       await ctr.waitForDeployment();
       alert(`✅ Listing deployed at ${ctr.target}`);
-      onAddListing({ uuid: ctr.target, price });
+      onAddListing({ uuid: presetUuid, price, contract: ctr.target });
       navigate("/");
     } catch (err) {
       if (err.code === 4001) {
@@ -782,6 +802,25 @@ function ListingDetail({ signer, handleRaiseDispute }) {
 
 // --- Main App ---
 export default function App() {
+  const checkSoldStatus = async (listedGpus, provider, setSoldMap) => {
+    const entries = await Promise.all(
+      listedGpus.map(async ({ contract }) => {
+        try {
+          const ctr = new ethers.Contract(contract, GPUListingJSON.abi, provider);
+          const deposited = await ctr.deposited();
+          console.log(`Contract ${contract} => deposited:`, deposited);
+          return [contract, deposited];
+        } catch (err) {
+          console.error("Error checking deposited status for", contract, err);
+          return [contract, false];
+        }
+      })
+    );
+    setSoldMap(Object.fromEntries(entries));
+  };
+  
+
+
   const [account, setAccount] = useState(null);
   const [signer, setSigner] = useState(null);
   const [listedGpus, setListedGpus] = useState([]);
@@ -789,6 +828,14 @@ export default function App() {
   const [disputes, setDisputes] = useState([]);
   const [benchmarks, setBenchmarks] = useState({});
   const [provider, setProvider] = useState(null);
+  const [soldMap, setSoldMap] = useState({});
+
+  useEffect(() => {
+    if (provider && listedGpus.length > 0) {
+      checkSoldStatus(listedGpus, provider, setSoldMap);  // 👈ここ
+    }
+  }, [listedGpus, provider]);
+  
   useEffect(() => {
     (async () => {
       if (!(await ensureSepolia())) return;
@@ -833,9 +880,10 @@ export default function App() {
       alert("Could not switch wallet: " + (err.message || err));
     }
   };
-  const addListing = ({ uuid, price }) => {
-    setListedGpus(prev => [...prev, { uuid, price }]);
+  const addListing = ({ uuid, price, contract }) => {
+  setListedGpus(prev => [...prev, { uuid, price, contract }]);
   };
+
 
   const addRegistration = (gpu) => {
 
@@ -857,6 +905,7 @@ export default function App() {
     }));
   };
 
+
   const handleDeposit = async (amount, addr) => {
     try {
       const ctr = new ethers.Contract(addr, GPUListingJSON.abi, signer);
@@ -868,12 +917,20 @@ export default function App() {
 
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
-
+      await checkSoldStatus(listedGpus, provider, setSoldMap);
       // ← NEW: record ownership on‐chain locally
-      setMyGpusMap(prev => ({
+      setMyGpusMap(prev => {
+      const existing = prev[account] || [];
+      const alreadyOwned = existing.some(gpu =>
+        gpu.uuid === uuid && gpu.reg_contract === regAddress
+      );
+
+      if (alreadyOwned) return prev;
+
+      return {
         ...prev,
         [account]: [
-          ...(prev[account] || []),
+          ...existing,
           {
             uuid,
             reg_contract: regAddress,
@@ -881,7 +938,8 @@ export default function App() {
             price: amount
           }
         ]
-      }));
+      };
+    });
     } catch (err) {
       // MetaMask / RPC error codes
       const code = err.code ?? err.error?.code;
@@ -905,6 +963,7 @@ export default function App() {
       // fallback for any other error
       console.error(err);
       alert(" Deposit failed: " + (msg || err));
+
     }
   };
 
@@ -920,6 +979,7 @@ export default function App() {
               handleDeposit={handleDeposit}
               onSwitchWallet={switchWallet}
               onSwitchSepolia={ensureSepolia}
+              soldMap={soldMap}
             />
           }
         />
@@ -941,6 +1001,7 @@ export default function App() {
               signer={signer}
               registeredGpusMap={myGpusMap}
               benchmarks={benchmarks}
+              listedGpus={listedGpus}
             />
           }
         />
