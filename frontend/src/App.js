@@ -236,7 +236,12 @@ function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
   if (account?.toLowerCase() !== ARBITER_ADDRESS.toLowerCase()) {
     return (
       <div className="p-8 text-center text-red-600">
-        Access denied: not the arbiter.
+        <p className="text-lg font-semibold mb-4">Access denied: not the arbiter.</p>
+        <div className="mt-6">
+          <Link to="/" className="text-teal-600 hover:underline text-base">
+            ← Back to Browse
+          </Link>
+        </div>
       </div>
     );
   }
