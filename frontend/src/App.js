@@ -371,6 +371,8 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
     if (!uuid || !benchmark) {
       return alert("Run benchmark first!");
     }
+
+  
     try {
       const factory = new ethers.ContractFactory(
         GPURegistrationJSON.abi,
@@ -503,7 +505,7 @@ function MyGPUs({ account, registeredGpusMap, benchmarks }) {
   );
 }
 // --- Sell page: pre-fill & skip registration if params present ---
-function Sell({ account, signer, onAddListing }) {
+function Sell({ account, signer, onAddListing, listedGpus}) {
   const { search } = useLocation();
   const params = new URLSearchParams(search);
   const presetReg  = params.get("reg");
@@ -518,6 +520,11 @@ function Sell({ account, signer, onAddListing }) {
     if (!uuid || !price || !presetReg) {
       return alert("UUID, registration address & price are required.");
     }
+    const alreadyListed = listedGpus.some(gpu => gpu.uuid === uuid);
+      if (alreadyListed) {
+        alert("This GPU is already listed for sale.");
+        return;
+      }
     try {
       const factory = new ethers.ContractFactory(
         GPUListingJSON.abi,
@@ -944,6 +951,7 @@ export default function App() {
               account={account}
               signer={signer}
               onAddListing={addListing}
+              listedGpus = {listedGpus}
             />
           }
         />
