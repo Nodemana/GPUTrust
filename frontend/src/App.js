@@ -487,7 +487,7 @@ function Sell({ account, signer, onAddListing }) {
       );
       const ctr = await factory.deploy(
         account,
-        ethers.parseEther(Math.floor(price*Math.pow(10, 18))), // Price in wei
+        ethers.parseEther(price.toString()), // Price in wei
         commissionPerc,
         presetReg
       );
