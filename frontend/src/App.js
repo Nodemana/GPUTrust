@@ -200,8 +200,8 @@ function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
     if (!signer) return;
     (async () => {
       const out = [];
-      for (let { uuid: address } of listedGpus) {
-        const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
+      for (let { contract } of listedGpus) {
+        const ctr = new ethers.Contract(contract, GPUListingJSON.abi, signer);
         const arb = await ctr.arbiter();
         const deposited = await ctr.deposited();
         if (
@@ -622,7 +622,7 @@ function Sell({ account, signer, onAddListing, listedGpus}) {
 }
 
 // --- Listing Details page ---
-function ListingDetail({ signer, handleRaiseDispute }) {
+function ListingDetail({ signer, account, raisedDisputes, handleRaiseDispute }) {
   const { address } = useParams();
   const navigate = useNavigate();
   const [sellerLoc, setSellerLoc] = useState(null);
@@ -704,6 +704,11 @@ function ListingDetail({ signer, handleRaiseDispute }) {
     await refresh();
   };
 
+  const disputeDisabled =
+  !details.deposited ||
+  details.releaseCount > 0 ||
+  raisedDisputes.includes(address);
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
@@ -758,8 +763,11 @@ function ListingDetail({ signer, handleRaiseDispute }) {
 
           <div className="mt-6 space-x-4">
             <button
-              onClick={() => approve("approveRelease")}
-              disabled={!details.deposited}
+              onClick={() => {
+                approve("approveRelease");
+                alert("Order is successfully confirmed!");
+              }}
+              disabled={disputeDisabled}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
               title="Confirm that the GPU has been delivered"
             >
@@ -768,9 +776,9 @@ function ListingDetail({ signer, handleRaiseDispute }) {
             <button
               onClick={() => {
                 handleRaiseDispute(address);
-                navigate("/arbitration");
+                alert("📢 Dispute raised successfully! The arbiter has been notified.");
               }}
-              disabled={!details.deposited}
+              disabled={disputeDisabled}
               className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50"
               title="Raise a dispute with the arbiter"
             >
@@ -1039,6 +1047,7 @@ export default function App() {
             <ListingDetail
               signer={signer}
               account={account}
+              raisedDisputes={disputes}
               handleRaiseDispute={handleRaiseDispute}
             />
           }
