@@ -130,13 +130,17 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
       <section id="listings" className="max-w-6xl mx-auto">
         <h3 className="text-2xl font-semibold mb-6">Latest Listings</h3>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {gpus.map(({ uuid, price }) => {
+          {gpus.map(({ uuid, price, sold }) => {
             const valid = ethers.isAddress(uuid);
             return (
-              <div
-                key={uuid}
-                className="bg-white p-6 rounded shadow flex flex-col justify-between"
-              >
+              <div key={uuid} className="bg-white p-6 rounded shadow flex flex-col justify-between relative">
+                {/* Sold tag if applicable */}
+                {sold && (
+                  <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+                    SOLD
+                  </div>
+                )}
+
                 <div>
                   <p className="text-sm text-gray-500">Contract</p>
                   <h4 className="font-semibold mb-2 break-all">{uuid}</h4>
@@ -148,19 +152,25 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
                     />
                   </p>
                 </div>
+
                 <div className="mt-4 flex items-center justify-between">
                   <button
                     onClick={async () => {
-                      if (!valid) return;
+                      if (!valid || sold) return;
                       await handleDeposit(price, uuid);
                       navigate(`/listing/${uuid}`);
                     }}
-                    disabled={!valid}
-                    className={`py-2 px-4 rounded text-white ${valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
+                    disabled={!valid || sold}
+                    className={`py-2 px-4 rounded text-white ${sold
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : valid
+                        ? "bg-teal-500 hover:bg-teal-600"
+                        : "bg-gray-300"
                       }`}
                   >
-                    Buy Now
+                    {sold ? "Sold" : "Buy Now"}
                   </button>
+
                   {valid ? (
                     <Link
                       to={`/listing/${uuid}`}
@@ -617,6 +627,10 @@ function ListingDetail({
   handleRaiseDispute,
   account,
   onCompletePurchase,
+<<<<<<< HEAD
+=======
+  onRefundComplete,
+>>>>>>> fc19a846 (rebase)
 }) {
   const { address } = useParams();
 
@@ -726,10 +740,13 @@ function ListingDetail({
         alert("💰 Funds released and recorded in My GPUs!");
         setDetails(d => ({ ...d, deposited: false }));
       }
-
       if (fn === "approveRefund" && fc === 2) {
         alert("🔄 Funds refunded to buyer!");
         setDetails(d => ({ ...d, deposited: false }));
+
+        if (typeof onRefundComplete === "function") {
+          onRefundComplete(address);
+        }
       }
     } catch (e) {
       console.error(`${fn}() failed:`, e.reason || e.message);
@@ -858,6 +875,9 @@ export default function App() {
       setAccount((await s.getAddress()).toLowerCase());
     })();
   }, []);
+  function removeListing(uuid) {
+    setListedGpus(prev => prev.filter(gpu => gpu.uuid !== uuid));
+  }
   const handleRaiseDispute = (address) => {
     setDisputes(prev =>
       prev.includes(address) ? prev : [...prev, address]
@@ -888,8 +908,9 @@ export default function App() {
     }
   };
   const addListing = ({ uuid, price }) => {
-    setListedGpus(prev => [...prev, { uuid, price }]);
+    setListedGpus(prev => [...prev, { uuid, price, sold: false }]);
   };
+<<<<<<< HEAD
 
   function completePurchase({ uuid, regContract, benchmarkHash, price, buyer, seller }) {
       const buyerKey = buyer.toLowerCase();
@@ -935,6 +956,41 @@ export default function App() {
      });
     }
     const addRegistration = (gpu) => {
+=======
+  function completePurchase({ uuid, regContract, benchmarkHash, price, buyer }) {
+    const buyerKey = buyer.toLowerCase();
+
+    setMyGpusMap(prev => {
+      const newMap = { ...prev };
+      const buyerGpus = newMap[buyerKey] || [];
+
+      const alreadyOwned = buyerGpus.some(
+        gpu => gpu.uuid === uuid && gpu.reg_contract === regContract
+      );
+
+      if (!alreadyOwned) {
+        newMap[buyerKey] = [
+          ...buyerGpus,
+          { uuid, reg_contract: regContract, benchmark_hash: benchmarkHash, price },
+        ];
+      }
+      for (const [addr, gpus] of Object.entries(newMap)) {
+        if (addr === buyerKey) continue;
+        const updated = gpus.filter(
+          gpu => !(gpu.uuid === uuid && gpu.reg_contract === regContract)
+        );
+        if (updated.length !== gpus.length) {
+          newMap[addr] = updated;
+        }
+      }
+
+      return newMap;
+    });
+
+    setListedGpus(prev => prev.filter(gpu => gpu.uuid !== uuid));
+  }
+  const addRegistration = (gpu) => {
+>>>>>>> fc19a846 (rebase)
 
     setBenchmarks(prev => ({
       ...prev,
@@ -965,7 +1021,11 @@ export default function App() {
 
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
-
+      setListedGpus(prev =>
+        prev.map(gpu =>
+          gpu.uuid === addr ? { ...gpu, sold: true } : gpu
+        )
+      );
     } catch (err) {
       const code = err.code ?? err.error?.code;
       const msg = err.message ?? err.error?.message ?? "";
@@ -1057,6 +1117,7 @@ export default function App() {
               account={account}
               handleRaiseDispute={handleRaiseDispute}
               onCompletePurchase={completePurchase}
+              onRefundComplete={removeListing}
             />
           }
         />
