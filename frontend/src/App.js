@@ -122,12 +122,6 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
             >
               <FaClipboardList className="mr-2" /> Register Your GPU
             </Link>
-            <Link
-              to="/sell"
-              className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded shadow inline-flex items-center"
-            >
-              <FaPlusCircle className="mr-2" /> Sell Your GPU
-            </Link>
           </div>
         </div>
         <FaShoppingCart className="text-teal-600 text-9xl opacity-20 mt-8 md:mt-0" />
@@ -411,7 +405,7 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
       const ctr = await factory.deploy(uuid, hash);
       await ctr.waitForDeployment();
       alert(`✅ Deployed!\nRegistration: ${ctr.target}`);
-   
+
       onAddRegistration({
         reg_contract: ctr.target,
         benchmark_hash: hash,
@@ -622,7 +616,7 @@ function ListingDetail({
   signer,
   handleRaiseDispute,
   account,
-  onCompletePurchase,  
+  onCompletePurchase,
 }) {
   const { address } = useParams();
 
@@ -719,12 +713,14 @@ function ListingDetail({
         const priceWei = await listingCtr.price();
         const price = ethers.formatEther(priceWei);
         const buyerAddr = await listingCtr.buyer();
+        const sellerAddr = await listingCtr.seller();
         onCompletePurchase({
           uuid,
           regContract: regAddr,
           benchmarkHash,
           price,
           buyer: buyerAddr,
+          seller: sellerAddr,
         });
 
         alert("💰 Funds released and recorded in My GPUs!");
@@ -894,42 +890,51 @@ export default function App() {
   const addListing = ({ uuid, price }) => {
     setListedGpus(prev => [...prev, { uuid, price }]);
   };
-  function completePurchase({ uuid, regContract, benchmarkHash, price, buyer }) {
-    const buyerKey = buyer.toLowerCase(); 
-    console.log("📦 completePurchase triggered", {
-      uuid, regContract, benchmarkHash, price, buyer, buyerKey
-    });
-  
-    setMyGpusMap(prev => {
-      const existing = prev[buyerKey] || [];
-  
-      const alreadyOwned = existing.some(gpu =>
-        gpu.uuid === uuid && gpu.reg_contract === regContract
-      );
-  
-      if (alreadyOwned) {
-        console.log("⚠️ GPU already exists for this buyer.");
-        return prev;
-      }
-  
-      const newMap = {
-        ...prev,
-        [buyerKey]: [
-          ...existing,
-          {
-            uuid,
-            reg_contract: regContract,
-            benchmark_hash: benchmarkHash,
-            price,
-          },
-        ],
-      };
-  
-      console.log("✅ Updated GPU map", newMap);
-      return newMap;
-    });
-  }
-  const addRegistration = (gpu) => {
+
+  function completePurchase({ uuid, regContract, benchmarkHash, price, buyer, seller }) {
+      const buyerKey = buyer.toLowerCase();
+      const sellerKey = seller.toLowerCase();
+
+      console.log("📦 completePurchase triggered", {
+        uuid, regContract, benchmarkHash, price, buyer, buyerKey, seller, sellerKey
+      });
+
+      setMyGpusMap(prev => {
+        const existingBuyerGpus = prev[buyerKey] || [];
+        const existingSellerGpus = prev[sellerKey] || [];
+
+        const alreadyOwned = existingBuyerGpus.some(
+          gpu => gpu.uuid === uuid && gpu.reg_contract === regContract
+        );
+
+        if (alreadyOwned) {
+          console.log("⚠️ GPU already exists for this buyer.");
+          return prev;
+        }
+
+        const updatedMap = {
+          ...prev,
+          // Remove the GPU from the seller
+          [sellerKey]: existingSellerGpus.filter(
+            gpu => !(gpu.uuid === uuid && gpu.reg_contract === regContract)
+          ),
+          // Add the GPU to the buyer
+          [buyerKey]: [
+            ...existingBuyerGpus,
+            {
+              uuid,
+              reg_contract: regContract,
+              benchmark_hash: benchmarkHash,
+              price,
+            },
+          ],
+        };
+
+        console.log("✅ Updated GPU map", updatedMap);
+        return updatedMap;
+     });
+    }
+    const addRegistration = (gpu) => {
 
     setBenchmarks(prev => ({
       ...prev,
