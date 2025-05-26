@@ -1,4 +1,6 @@
 // src/App.js
+
+// React Imports
 import { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
@@ -9,6 +11,13 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
+
+// Smart Contract Imports
+import { ethers } from "ethers";
+import GPUListingJSON from "./contracts/GPUListing.json";
+import GPURegistrationJSON from "./contracts/GPURegistration.json";
+
+// Icons
 import {
   FaShoppingCart,
   FaPlusCircle,
@@ -17,14 +26,16 @@ import {
   FaClipboardList,
 } from "react-icons/fa";
 import { PiGraphicsCardFill } from "react-icons/pi";
-import { ethers } from "ethers";
-import GPUListingJSON from "./contracts/GPUListing.json";
-import GPURegistrationJSON from "./contracts/GPURegistration.json";
+import { FaGavel } from "react-icons/fa";
 
+// Custom Components
 import getBenchmark from "./utils.js";
 import ShippingAndMap from "./components/ShippingAndMap";
-import { FaGavel } from "react-icons/fa";
+
+// Hardcoded Constants
 const ARBITER_ADDRESS = '0x32Ce567764bE7395aE8B6Ba2Bf90870d4762D0dB'
+
+
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -61,6 +72,7 @@ async function ensureSepolia() {
     return false;
   }
 }
+
 export async function geocodeAddress(address) {
   // For now just return a fixed location if address matches our example
   if (address.includes("Mountain View")) {
@@ -69,6 +81,7 @@ export async function geocodeAddress(address) {
   // Fallback: return null or a default
   return null;
 }
+
 // --- Home page ---
 function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet, soldMap }) {
   const navigate = useNavigate();
@@ -160,7 +173,7 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet, s
                 <button
                   onClick={async () => {
                     if (!valid || isSold) return;
-                    await handleDeposit(price, contract); 
+                    await handleDeposit(price, contract);
                     navigate("/mygpus");
                   }}
                   disabled={!valid || !isReady || isSold}
@@ -193,6 +206,7 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet, s
     </div>
   );
 }
+
 function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
   const [onChainDisputes, setOnChainDisputes] = useState([]);
 
@@ -294,6 +308,7 @@ function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
     </div>
   );
 }
+
 // --- Benchmark & GPU Cards ---
 function BenchmarkCard({ data, uuid }) {
   return (
@@ -384,7 +399,7 @@ function RegisterGPU({ account, signer, onAddRegistration }) {
       return alert("Run benchmark first!");
     }
 
-  
+
     try {
       const factory = new ethers.ContractFactory(
         GPURegistrationJSON.abi,
@@ -831,7 +846,7 @@ export default function App() {
     );
     setSoldMap(Object.fromEntries(entries));
   };
-  
+
 
 
   const [account, setAccount] = useState(null);
@@ -845,10 +860,10 @@ export default function App() {
 
   useEffect(() => {
     if (provider && listedGpus.length > 0) {
-      checkSoldStatus(listedGpus, provider, setSoldMap);  // 👈ここ
+      checkSoldStatus(listedGpus, provider, setSoldMap);
     }
   }, [listedGpus, provider]);
-  
+
   useEffect(() => {
     (async () => {
       if (!(await ensureSepolia())) return;
@@ -862,6 +877,7 @@ export default function App() {
       setAccount(await s.getAddress());
     })();
   }, []);
+
   const handleRaiseDispute = (address) => {
     setDisputes(prev =>
       prev.includes(address) ? prev : [...prev, address]
