@@ -1,5 +1,5 @@
 // src/App.js
-import { useEffect, useState } from "react";
+import { useEffect, useState,useCallback } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -24,7 +24,7 @@ import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
 import ShippingAndMap from "./components/ShippingAndMap";
 import { FaGavel } from "react-icons/fa";
-const ARBITER_ADDRESS = '0x32Ce567764bE7395aE8B6Ba2Bf90870d4762D0dB'
+const ARBITER_ADDRESS = '0x482411C3819C39c69b9243E054F434d5e7218e3d'
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -159,7 +159,7 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
                     onClick={async () => {
                       if (!valid) return;
                       await handleDeposit(price, uuid);
-                      navigate("/mygpus");
+                      navigate(`/listing/${uuid}`);
                     }}
                     disabled={!valid}
                     className={`py-2 px-4 rounded text-white ${valid ? "bg-teal-500 hover:bg-teal-600" : "bg-gray-300"
@@ -187,42 +187,47 @@ function Home({ account, gpus, handleDeposit, onSwitchSepolia, onSwitchWallet })
   );
 }
 function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
-  const [onChainDisputes, setOnChainDisputes] = useState([]);
+  const [disputes, setDisputes] = useState([]);
+
+  const loadDisputes = useCallback(async () => {
+    if (!signer) return;
+
+    const onChain = [];
+    for (let { uuid: address } of listedGpus) {
+      const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
+      const [arb, deposited, r, f] = await Promise.all([
+        ctr.arbiter(),
+        ctr.deposited(),
+        ctr.release_ApprovalCount(),
+        ctr.refund_ApprovalCount(),
+      ]);
+
+      const isArbiter = arb.toLowerCase() === ARBITER_ADDRESS.toLowerCase();
+      const hasIssue  = Number(r) > 0 || Number(f) > 0;
+
+      if (isArbiter && deposited && hasIssue) {
+        onChain.push(address);
+      }
+    }
+
+ 
+    setDisputes(Array.from(new Set([...onChain, ...raisedDisputes])));
+  }, [signer, listedGpus, raisedDisputes]);
 
   useEffect(() => {
-    if (!signer) return;
-    (async () => {
-      const out = [];
-      for (let { uuid: address } of listedGpus) {
-        const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
-        const arb = await ctr.arbiter();
-        const deposited = await ctr.deposited();
-        if (
-          arb.toLowerCase() === ARBITER_ADDRESS.toLowerCase() &&
-          deposited
-        ) {
-          const r = await ctr.release_ApprovalCount();
-          const f = await ctr.refund_ApprovalCount();
-          if (r > 0 && f > 0) out.push(address);
-        }
-      }
-      setOnChainDisputes(out);
-    })();
-  }, [signer, listedGpus]);
-
-  const allDisputes = Array.from(
-    new Set([...onChainDisputes, ...raisedDisputes])
-  );
+    loadDisputes();
+  }, [loadDisputes]);
 
   const handleApprove = async (address, method) => {
     try {
       const ctr = new ethers.Contract(address, GPUListingJSON.abi, signer);
-      const tx = await ctr[method]();
+      const tx  = await ctr[method]();
       await tx.wait();
       alert(`✅ ${method} succeeded on ${address}`);
+      await loadDisputes();
     } catch (err) {
       console.error(err);
-      alert(`❌ ${method} failed: ${err.message || err}`);
+      alert(`❌ ${method} failed: ${err.reason || err.message}`);
     }
   };
 
@@ -237,11 +242,11 @@ function ArbiterDashboard({ signer, listedGpus, raisedDisputes, account }) {
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       <h2 className="text-3xl font-bold mb-6">Arbitration Dashboard</h2>
-      {allDisputes.length === 0 ? (
+      {disputes.length === 0 ? (
         <p className="text-gray-600">No active disputes.</p>
       ) : (
         <div className="space-y-4">
-          {allDisputes.map((addr) => (
+          {disputes.map((addr) => (
             <div
               key={addr}
               className="bg-white p-4 rounded shadow flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0"
@@ -463,14 +468,13 @@ function MyGPUs({ account, registeredGpusMap, benchmarks }) {
       <h2 className="text-3xl font-bold text-teal-700 mb-8">My GPUs</h2>
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
         {mygpus.map((gpu) => {
-          // look up the full benchmark object by its hash
+        
           const fullBench = benchmarks[gpu.benchmark_hash] || {};
           return (
             <div
               key={gpu.uuid}
               className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col"
             >
-              {/* pass the enriched GPU object into your existing GPUCard */}
               <GPUCard
                 gpu={{
                   ...gpu,
@@ -506,13 +510,13 @@ function MyGPUs({ account, registeredGpusMap, benchmarks }) {
 function Sell({ account, signer, onAddListing }) {
   const { search } = useLocation();
   const params = new URLSearchParams(search);
-  const presetReg  = params.get("reg");
+  const presetReg = params.get("reg");
   const presetUuid = params.get("uuid");
 
-  const [uuid, setUuid]   = useState(presetUuid || "");
+  const [uuid, setUuid] = useState(presetUuid || "");
   const [price, setPrice] = useState("");
-  const commissionPerc    = 1;
-  const navigate          = useNavigate();
+  const commissionPerc = 1;
+  const navigate = useNavigate();
 
   const handleSubmit = async () => {
     if (!uuid || !price || !presetReg) {
@@ -524,7 +528,6 @@ function Sell({ account, signer, onAddListing }) {
         GPUListingJSON.bytecode,
         signer
       );
-      // note the order: seller, arbiter, price, commission, registration
       const ctr = await factory.deploy(
         ARBITER_ADDRESS,
         ethers.parseEther(price),
@@ -588,25 +591,28 @@ function Sell({ account, signer, onAddListing }) {
     </div>
   );
 }
-
-// --- Listing Details page ---
-function ListingDetail({ signer, handleRaiseDispute }) {
+function ListingDetail({
+  signer,
+  handleRaiseDispute,
+  account,
+  onCompletePurchase, 
+}) {
   const { address } = useParams();
-  const navigate = useNavigate();
-  const [sellerLoc, setSellerLoc] = useState(null);
-  const [buyerAddress, setBuyerAddress] = useState(null);
+  const navigate   = useNavigate();
+
   const [listingCtr, setListingCtr] = useState(null);
-  const [details, setDetails] = useState({
-    seller: "",
-    arbiter: "",
-    buyer: "",
-    deposited: false,
-    releaseCount: 0,
-    refundCount: 0,
-    uuid: "",
-    owners: [],
-    hashes: [],
+  const [details,    setDetails]    = useState({
+    seller: "", arbiter: "", buyer: "",
+    deposited: false, uuid: "",
+    owners: [], hashes: [],
   });
+  const [sellerLoc, setSellerLoc]   = useState(null);
+
+  const [releaseCount,       setReleaseCount]       = useState(0);
+  const [refundCount,        setRefundCount]        = useState(0);
+  const [hasReleaseApproved, setHasReleaseApproved] = useState(false);
+  const [hasRefundApproved,  setHasRefundApproved]  = useState(false);
+
 
   useEffect(() => {
     if (!signer) return;
@@ -614,64 +620,108 @@ function ListingDetail({ signer, handleRaiseDispute }) {
     setListingCtr(ctr);
 
     (async () => {
-      // fetch listing data + registration address
-      const [seller, arbiter, buyer, deposited, rc, fc, regAddr] =
-        await Promise.all([
-          ctr.seller(),
-          ctr.arbiter(),
-          ctr.buyer(),
-          ctr.deposited(),
-          ctr.release_ApprovalCount(),
-          ctr.refund_ApprovalCount(),
-          ctr.gpu_registration(),
-        ]);
+      const [seller, arbiter, buyer, deposited, regAddr] = await Promise.all([
+        ctr.seller(),
+        ctr.arbiter(),
+        ctr.buyer(),
+        ctr.deposited(),
+        ctr.gpu_registration(),
+      ]);
 
-      // fetch registration details
-      const regCtr = new ethers.Contract(
-        regAddr,
-        GPURegistrationJSON.abi,
-        signer
-      );
+      const regCtr = new ethers.Contract(regAddr, GPURegistrationJSON.abi, signer);
       const [uuid, owners, hashes] = await regCtr.getDetails();
 
-      setDetails({
-        seller,
-        arbiter,
-        buyer,
-        deposited,
-        releaseCount: rc,
-        refundCount: fc,
-        uuid,
-        owners,
-        hashes,
-      });
+      setDetails({ seller, arbiter, buyer, deposited, uuid, owners, hashes });
+      await reloadApprovalsAndDeposit(ctr);
     })();
   }, [signer, address]);
 
   useEffect(() => {
     if (!details.seller) return;
-    geocodeAddress(details.seller).then((pos) => {
-      setSellerLoc(pos);
-    });
+    geocodeAddress(details.seller).then(setSellerLoc);
   }, [details.seller]);
-  const refresh = async () => {
-    const d = await listingCtr.deposited();
-    const rc = await listingCtr.release_ApprovalCount();
-    const fc = await listingCtr.refund_ApprovalCount();
-    setDetails((prev) => ({
-      ...prev,
-      deposited: d,
-      releaseCount: rc,
-      refundCount: fc,
-    }));
-  };
 
-  const approve = async (fn) => {
-    const tx = await listingCtr[fn]();
-    await tx.wait();
-    await refresh();
-  };
 
+  const reloadApprovalsAndDeposit = useCallback(
+    async (ctr = listingCtr) => {
+      if (!ctr || !account) return { rc: 0, fc: 0 };
+      const [rcRaw, apr, fcRaw, afr, deposited] = await Promise.all([
+        ctr.release_ApprovalCount(),
+        ctr.approvedRelease(account),
+        ctr.refund_ApprovalCount(),
+        ctr.approvedRefund(account),
+        ctr.deposited(),
+      ]);
+  
+      const rc = Number(rcRaw);
+      const fc = Number(fcRaw);
+  
+      setReleaseCount(rc);
+      setHasReleaseApproved(apr);
+      setRefundCount(fc);
+      setHasRefundApproved(afr);
+      setDetails(d => ({ ...d, deposited }));
+  
+      return { rc, fc };
+    },
+    [listingCtr, account]
+  );
+
+
+  useEffect(() => {
+    if (releaseCount !== 2 || !listingCtr || !signer) return;
+    (async () => {
+      const regAddr = await listingCtr.gpu_registration();
+      const regCtr  = new ethers.Contract(regAddr, GPURegistrationJSON.abi, signer);
+      const [, owners, hashes] = await regCtr.getDetails();
+      setDetails(d => ({ ...d, owners, hashes }));
+    })();
+  }, [releaseCount, listingCtr, signer]);
+
+
+  async function handleApprove(fn) {
+    try {
+      const tx = await listingCtr[fn]();
+      await tx.wait();
+
+    
+      const { rc, fc } = await reloadApprovalsAndDeposit(listingCtr);
+
+  
+      if (fn === "approveRefund" && fc === 1) {
+        handleRaiseDispute(address);
+      }
+
+      if (fn === "approveRelease" && rc === 2) {
+    
+        const regAddr         = await listingCtr.gpu_registration();
+        const regCtr          = new ethers.Contract(regAddr, GPURegistrationJSON.abi, signer);
+        const [uuid, , hashes] = await regCtr.getDetails();
+        const benchmarkHash   = hashes[hashes.length - 1];
+        const priceWei        = await listingCtr.price();
+        const price           = ethers.formatEther(priceWei);
+
+      
+        onCompletePurchase(details.buyer, {
+          uuid,
+          regContract: regAddr,
+          benchmarkHash,
+          price,
+        });
+
+        alert("💰 Funds released and recorded in My GPUs!");
+        setDetails(d => ({ ...d, deposited: false }));
+      }
+
+      if (fn === "approveRefund" && fc === 2) {
+        alert("🔄 Funds refunded to buyer!");
+        setDetails(d => ({ ...d, deposited: false }));
+      }
+    } catch (e) {
+      console.error(`${fn}() failed:`, e.reason || e.message);
+      alert(`${fn} failed: ${e.reason || e.message}`);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
@@ -679,79 +729,80 @@ function ListingDetail({ signer, handleRaiseDispute }) {
         <div className="px-8 py-6">
           <h2 className="text-3xl font-bold mb-4">Listing Details</h2>
 
+          {/* Core details */}
           {[
             ["Contract", address],
-            ["Seller", details.seller],
-            ["Arbiter", details.arbiter],
-            ["Buyer", details.buyer],
-            ["UUID", details.uuid],
-          ].map(([label, val]) => (
-            <div className="flex" key={label}>
-              <span className="w-32 font-medium">{label}:</span>
+            ["Seller",   details.seller],
+            ["Arbiter",  details.arbiter],
+            ["Buyer",    details.buyer],
+            ["UUID",     details.uuid],
+          ].map(([lbl, val]) => (
+            <div className="flex mb-2" key={lbl}>
+              <span className="w-32 font-medium">{lbl}:</span>
               <span className="break-all">{val}</span>
             </div>
           ))}
 
-          <div className="flex items-center mt-4">
+          {/* Deposited flag */}
+          <div className="flex items-center mt-4 mb-6">
             <span className="w-32 font-medium">Deposited:</span>
-            <span
-              className={`px-2 py-1 rounded-full text-sm font-semibold ${details.deposited
-                ? "bg-green-100 text-green-800"
-                : "bg-red-100 text-red-800"
-                }`}
-            >
+            <span className={`px-2 py-1 rounded-full text-sm font-semibold ${
+              details.deposited ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            }`}>
               {details.deposited ? "Yes" : "No"}
             </span>
           </div>
-          <section className="mt-8">
+
+          {/* Shipping & Map */}
+          <section className="mb-6">
             <h3 className="text-xl font-semibold mb-4">Shipping Info</h3>
             <ShippingAndMap
               sellerLocation={sellerLoc}
-              onBuyerAddress={(addr, pos) => setBuyerAddress({ addr, pos })}
+              onBuyerAddress={(addr, pos) =>
+                setDetails(d => ({ ...d, buyer: addr }))
+              }
             />
           </section>
-          <div className="flex items-center mt-2">
-            <span className="w-32 font-medium">Release Approvals:</span>
+
+          {/* Approval counters */}
+          <div className="flex items-center mb-4">
+            <span className="w-32 font-medium">Release:</span>
             <span className="px-2 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-              {details.releaseCount}
+              {releaseCount} / 2
             </span>
           </div>
-
-          <div className="flex items-center mt-2">
-            <span className="w-32 font-medium">Refund Approvals:</span>
+          <div className="flex items-center mb-6">
+            <span className="w-32 font-medium">Refund:</span>
             <span className="px-2 py-1 rounded-full text-sm bg-yellow-100 text-yellow-800">
-              {details.refundCount}
+              {refundCount} / 2
             </span>
           </div>
 
-          <div className="mt-6 space-x-4">
+          {/* Action buttons */}
+          <div className="flex flex-col space-y-4">
             <button
-              onClick={() => approve("approveRelease")}
-              disabled={!details.deposited}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
-              title="Confirm that the GPU has been delivered"
+              onClick={() => handleApprove("approveRelease")}
+              disabled={!details.deposited || hasReleaseApproved}
+              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
             >
               Confirm Completion
             </button>
             <button
-              onClick={() => {
-                handleRaiseDispute(address);
-                navigate("/arbitration");
-              }}
-              disabled={!details.deposited}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50"
-              title="Raise a dispute with the arbiter"
+              onClick={() => handleApprove("approveRefund")}
+              disabled={!details.deposited || hasRefundApproved}
+              className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded disabled:opacity-50"
             >
-              Raise Dispute
+              Raise Dispute & Refund
             </button>
           </div>
         </div>
 
+        {/* Ownership & Benchmark history */}
         <div className="mt-8 bg-white p-6 rounded-lg shadow">
           <h3 className="text-xl font-semibold mb-4">Ownership History</h3>
           <ul className="list-disc list-inside">
-            {details.owners.map((owner, i) => (
-              <li key={i} className="break-all">{owner}</li>
+            {details.owners.map((o, i) => (
+              <li key={i} className="break-all">{o}</li>
             ))}
           </ul>
 
@@ -772,7 +823,6 @@ function ListingDetail({ signer, handleRaiseDispute }) {
     </div>
   );
 }
-
 // --- Main App ---
 export default function App() {
   const [account, setAccount] = useState(null);
@@ -782,13 +832,13 @@ export default function App() {
   const [disputes, setDisputes] = useState([]);
   const [benchmarks, setBenchmarks] = useState({});
   const [provider, setProvider] = useState(null);
+  
   useEffect(() => {
     (async () => {
       if (!(await ensureSepolia())) return;
       const p = new ethers.BrowserProvider(window.ethereum);
       setProvider(p);
 
-      // prompt once
       await p.send("eth_requestAccounts", []);
       const s = await p.getSigner();
       setSigner(s);
@@ -806,13 +856,11 @@ export default function App() {
       return;
     }
     try {
-      // ask MetaMask to re-request account permissions
+  
       await window.ethereum.request({
         method: "wallet_requestPermissions",
         params: [{ eth_accounts: {} }],
       });
-
-      // now prompt the user to pick an account
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
@@ -829,7 +877,25 @@ export default function App() {
   const addListing = ({ uuid, price }) => {
     setListedGpus(prev => [...prev, { uuid, price }]);
   };
-
+  function completePurchase({ uuid, regContract, benchmarkHash, price }) {
+    setBenchmarks(prev => ({
+      ...prev,
+      [benchmarkHash]: details.benchmarks[benchmarkHash]  
+    }));
+  
+    setMyGpusMap(prev => ({
+      ...prev,
+      [account]: [
+        ...(prev[account] || []),
+        {
+          uuid,
+          reg_contract: regContract,     
+          benchmark_hash: benchmarkHash,  
+          price
+        }
+      ]
+    }));
+  }
   const addRegistration = (gpu) => {
 
     setBenchmarks(prev => ({
@@ -862,21 +928,7 @@ export default function App() {
       await tx.wait();
       alert(`💰 Deposited ${amount} ETH`);
 
-      // ← NEW: record ownership on‐chain locally
-      setMyGpusMap(prev => ({
-        ...prev,
-        [account]: [
-          ...(prev[account] || []),
-          {
-            uuid,
-            reg_contract: regAddress,
-            benchmark_hash: mostRecentHash,
-            price: amount
-          }
-        ]
-      }));
     } catch (err) {
-      // MetaMask / RPC error codes
       const code = err.code ?? err.error?.code;
       const msg = err.message ?? err.error?.message ?? "";
 
@@ -889,7 +941,6 @@ export default function App() {
         return;
       }
 
-      // user explicitly rejected the tx
       if (code === 4001 || code === "ACTION_REJECTED") {
         alert("⚠️ Deposit cancelled by user.");
         return;
@@ -900,7 +951,15 @@ export default function App() {
       alert(" Deposit failed: " + (msg || err));
     }
   };
-
+  function completePurchase({ uuid, regContract, benchmarkHash, price }) {
+    setMyGpusMap(prev => ({
+      ...prev,
+      [account]: [
+        ...(prev[account] || []),
+        { uuid, reg_contract: regContract, benchmark_hash: benchmarkHash, price }
+      ]
+    }));
+  }
   return (
     <Router>
       <Routes>
@@ -966,6 +1025,7 @@ export default function App() {
               signer={signer}
               account={account}
               handleRaiseDispute={handleRaiseDispute}
+              onCompletePurchase={completePurchase}
             />
           }
         />
