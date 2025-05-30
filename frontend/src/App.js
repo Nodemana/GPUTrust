@@ -24,7 +24,7 @@ import GPURegistrationJSON from "./contracts/GPURegistration.json";
 import getBenchmark from "./utils.js";
 import ShippingAndMap from "./components/ShippingAndMap";
 import { FaGavel } from "react-icons/fa";
-const ARBITER_ADDRESS = '0x482411C3819C39c69b9243E054F434d5e7218e3d'
+const ARBITER_ADDRESS = '' // HARDCODE ARBITER ADDRESS HERE
 // --- switch MetaMask to Sepolia ---
 async function ensureSepolia() {
   if (!window.ethereum) {
@@ -627,10 +627,7 @@ function ListingDetail({
   handleRaiseDispute,
   account,
   onCompletePurchase,
-<<<<<<< HEAD
-=======
   onRefundComplete,
->>>>>>> fc19a846 (rebase)
 }) {
   const { address } = useParams();
 
@@ -910,7 +907,6 @@ export default function App() {
   const addListing = ({ uuid, price }) => {
     setListedGpus(prev => [...prev, { uuid, price, sold: false }]);
   };
-<<<<<<< HEAD
 
   function completePurchase({ uuid, regContract, benchmarkHash, price, buyer, seller }) {
       const buyerKey = buyer.toLowerCase();
@@ -956,42 +952,6 @@ export default function App() {
      });
     }
     const addRegistration = (gpu) => {
-=======
-  function completePurchase({ uuid, regContract, benchmarkHash, price, buyer }) {
-    const buyerKey = buyer.toLowerCase();
-
-    setMyGpusMap(prev => {
-      const newMap = { ...prev };
-      const buyerGpus = newMap[buyerKey] || [];
-
-      const alreadyOwned = buyerGpus.some(
-        gpu => gpu.uuid === uuid && gpu.reg_contract === regContract
-      );
-
-      if (!alreadyOwned) {
-        newMap[buyerKey] = [
-          ...buyerGpus,
-          { uuid, reg_contract: regContract, benchmark_hash: benchmarkHash, price },
-        ];
-      }
-      for (const [addr, gpus] of Object.entries(newMap)) {
-        if (addr === buyerKey) continue;
-        const updated = gpus.filter(
-          gpu => !(gpu.uuid === uuid && gpu.reg_contract === regContract)
-        );
-        if (updated.length !== gpus.length) {
-          newMap[addr] = updated;
-        }
-      }
-
-      return newMap;
-    });
-
-    setListedGpus(prev => prev.filter(gpu => gpu.uuid !== uuid));
-  }
-  const addRegistration = (gpu) => {
->>>>>>> fc19a846 (rebase)
-
     setBenchmarks(prev => ({
       ...prev,
       [gpu.benchmark_hash]: gpu.benchmark
